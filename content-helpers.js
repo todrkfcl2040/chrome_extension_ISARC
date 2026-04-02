@@ -84,12 +84,22 @@
         return '저장 버튼을 찾지 못해 다음 주기에 다시 확인합니다.';
       case 'already_pending':
         return '이전 예약 시도가 아직 진행 중입니다.';
+      case 'no_alternative_slots':
+        return '지정 시간이 찼고, 같은 길이의 다른 빈 시간도 없습니다.';
+      case 'no_reservable_fallback_slot':
+        return '다른 빈 시간들을 모두 시도했지만 예약하지 못했습니다.';
       case 'stopped':
         return '자동 예약을 중지했습니다.';
       default:
         return '예약 시도가 실패했습니다.';
     }
   };
+
+  const slotKey = (slot) => `${slot.start}|${slot.end}`;
+  const getDurationMinutesFromSlot = (slot) =>
+    Math.max(1, Math.round((parseDateTime(slot.end) - parseDateTime(slot.start)) / (60 * 1000)));
+  const isStructuralReserveFailure = (reason) =>
+    ['missing_request_function', 'request_failed', 'already_pending', 'missing_input_field', 'stopped'].includes(reason);
 
   const setInputValue = (selector, value) => {
     const $ = window.jQuery;
@@ -234,8 +244,9 @@
       dateStr = null,
       preferAfter = null,
       preferBefore = null,
-      limit = 30
+      limit = null
     } = opts;
+    const maxSlots = typeof limit === 'number' && Number.isFinite(limit) ? limit : Number.MAX_SAFE_INTEGER;
 
     const bookingType =
       typeof window.BOOKING_TYPE !== 'undefined' && window.BOOKING_TYPE
@@ -331,7 +342,7 @@
       while (+cursor + durationMin * 60 * 1000 <= +gapEnd) {
         const end = new Date(+cursor + durationMin * 60 * 1000);
         slots.push({ start: formatDateTime(cursor), end: formatDateTime(end) });
-        if (slots.length >= limit) return true;
+        if (slots.length >= maxSlots) return true;
         cursor = new Date(+cursor + unitMinutes * 60 * 1000);
       }
 
@@ -349,7 +360,7 @@
       if (cursor >= dayEnd) return { slots };
     }
 
-    if (slots.length < limit && cursor < dayEnd) pushSlotsInGap(cursor, dayEnd);
+    if (slots.length < maxSlots && cursor < dayEnd) pushSlotsInGap(cursor, dayEnd);
     return { slots };
   };
 
@@ -435,6 +446,64 @@
       clearTimeout(state.overlayTimerId);
       state.overlayTimerId = null;
     }
+  };
+
+  const tryAlternativeSlots = async ({ failedSlot, dateStr, emailConfig }) => {
+    const requestedStartMs = parseDateTime(failedSlot.start).getTime();
+    const durationMin = getDurationMinutesFromSlot(failedSlot);
+    const { slots } = await G.findFreeSlots({
+      dateStr,
+      durationMin,
+      limit: Number.MAX_SAFE_INTEGER
+    });
+
+    const alternativeSlots = slots
+      .filter((slot) => slotKey(slot) !== slotKey(failedSlot))
+      .sort((a, b) => {
+        const diffA = Math.abs(parseDateTime(a.start).getTime() - requestedStartMs);
+        const diffB = Math.abs(parseDateTime(b.start).getTime() - requestedStartMs);
+        if (diffA !== diffB) return diffA - diffB;
+        return parseDateTime(a.start).getTime() - parseDateTime(b.start).getTime();
+      });
+
+    if (!alternativeSlots.length) {
+      return { ok: false, reason: 'no_alternative_slots' };
+    }
+
+    for (let index = 0; index < alternativeSlots.length; index += 1) {
+      if (state.stopRequested) {
+        return { ok: false, reason: 'stopped' };
+      }
+
+      const alternativeSlot = alternativeSlots[index];
+      G.updateStatus(
+        `지정 시간이 차서 다른 빈 시간을 시도합니다. (${index + 1}/${alternativeSlots.length}) ${alternativeSlot.start}`
+      );
+
+      if (!G.fillSlotOnPage(alternativeSlot)) {
+        return { ok: false, reason: 'missing_input_field' };
+      }
+
+      const result = await G.tryReserve(emailConfig || {}, alternativeSlot);
+      if (result.ok) {
+        return {
+          ok: true,
+          slot: alternativeSlot,
+          usedFallback: true,
+          attemptedCount: index + 1
+        };
+      }
+
+      if (isStructuralReserveFailure(result.reason)) {
+        return result;
+      }
+    }
+
+    return {
+      ok: false,
+      reason: 'no_reservable_fallback_slot',
+      attemptedCount: alternativeSlots.length
+    };
   };
 
   G.startLoop = function (opts = {}) {
@@ -539,9 +608,35 @@
       return { ok: false, reason: 'missing_input_field' };
     }
 
-    const result = await G.tryReserve(emailConfig || {}, slot);
+    let result = await G.tryReserve(emailConfig || {}, slot);
+    let reservedSlot = slot;
+
+    if (result.reason === 'save_button_timeout') {
+      result = await tryAlternativeSlots({
+        failedSlot: slot,
+        dateStr,
+        emailConfig: emailConfig || {}
+      });
+      if (result.ok && result.slot) {
+        reservedSlot = result.slot;
+      }
+    }
+
     if (result.ok) {
-      G.sendEmail(emailConfig || {}, slot);
+      const emailSent = G.sendEmail(emailConfig || {}, reservedSlot);
+      if (result.usedFallback) {
+        G.updateStatus(
+          emailSent
+            ? `원래 시간이 차서 ${reservedSlot.start}로 대체 예약했고 이메일 전송을 요청했습니다.`
+            : `원래 시간이 차서 ${reservedSlot.start}로 대체 예약했습니다.`
+        );
+      } else {
+        G.updateStatus(
+          emailSent
+            ? `${reservedSlot.start} 예약 완료. 이메일 전송을 요청했습니다.`
+            : `${reservedSlot.start} 예약을 완료했습니다.`
+        );
+      }
     } else {
       G.updateStatus(describeReserveFailure(result.reason));
     }

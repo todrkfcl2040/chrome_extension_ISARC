@@ -6,18 +6,6 @@ async function getActiveTab() {
 const pad2 = (n) => String(n).padStart(2, '0');
 const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-const getNextMidnight = () => {
-  const next = new Date();
-  next.setHours(24, 0, 0, 0);
-  return next;
-};
-
-const getTargetDateForNextMidnight = () => {
-  const target = getNextMidnight();
-  target.setDate(target.getDate() + 13);
-  return formatDate(target);
-};
-
 const getValue = (id) => document.getElementById(id)?.value?.trim() || '';
 const setText = (id, text) => {
   const element = document.getElementById(id);
@@ -84,6 +72,23 @@ function persistPopupState() {
   chrome.storage.local.set({ userEmail: getValue('userEmail') });
 }
 
+async function refreshMidnightReserveInfo() {
+  try {
+    const info = await sendRuntimeMessage({ action: 'GET_MIDNIGHT_RESERVE_INFO' });
+    if (!info?.ok) {
+      setText('midnightTargetDate', `서버시간 조회 실패: ${info?.error || '알 수 없는 오류'}`);
+      return;
+    }
+
+    setText(
+      'midnightTargetDate',
+      `예약 날짜: ${info.targetDateStr} (서버 자정 ${info.nextServerMidnightText} 기준)`
+    );
+  } catch (error) {
+    setText('midnightTargetDate', `서버시간 조회 실패: ${error.message}`);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.local.get(['userEmail'], ({ userEmail }) => {
     if (userEmail) {
@@ -101,7 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dateInput.max = formatDate(maxDate);
   }
 
-  setText('midnightTargetDate', `예약 날짜: ${getTargetDateForNextMidnight()} (자정 오픈)`);
+  setText('midnightTargetDate', '서버시간 확인 중...');
+  refreshMidnightReserveInfo();
 });
 
 document.getElementById('findFreeSlotBtn')?.addEventListener('click', async () => {
@@ -239,24 +245,29 @@ document.getElementById('midnightReserveStartBtn')?.addEventListener('click', as
     return;
   }
 
-  const nextMidnight = getNextMidnight();
-  const targetDateStr = getTargetDateForNextMidnight();
-
   try {
-    await sendRuntimeMessage({
+    const info = await sendRuntimeMessage({
       action: 'SCHEDULE_MIDNIGHT_RESERVE',
       data: {
         tabId: tab.id,
-        alarmAt: nextMidnight.getTime(),
         startTime,
         endTime,
         emailConfig: getEmailConfig()
       }
     });
 
+    if (!info?.ok) {
+      setText('midnightReserveStatus', `설정 실패: ${info?.error || '알 수 없는 오류'}`);
+      return;
+    }
+
     setText(
       'midnightReserveStatus',
-      `대기 설정 완료: ${formatDate(nextMidnight)} 00:00 (대상 ${targetDateStr})`
+      `대기 설정 완료: 서버 ${info.nextServerMidnightText} (대상 ${info.targetDateStr})`
+    );
+    setText(
+      'midnightTargetDate',
+      `예약 날짜: ${info.targetDateStr} (서버 자정 ${info.nextServerMidnightText} 기준)`
     );
   } catch (error) {
     setText('midnightReserveStatus', `설정 실패: ${error.message}`);
@@ -267,6 +278,7 @@ document.getElementById('midnightReserveCancelBtn')?.addEventListener('click', a
   try {
     await sendRuntimeMessage({ action: 'CANCEL_MIDNIGHT_RESERVE' });
     setText('midnightReserveStatus', '자정 예약을 취소했습니다.');
+    refreshMidnightReserveInfo();
   } catch (error) {
     setText('midnightReserveStatus', `취소 실패: ${error.message}`);
   }
