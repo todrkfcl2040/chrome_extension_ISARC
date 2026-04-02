@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "check: background.js",
+      "type": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "--check",
+        "${workspaceFolder}\\background.js"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "check: popup.js",
+      "type": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "--check",
+        "${workspaceFolder}\\popup.js"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "check: content-helpers.js",
+      "type": "process",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "--check",
+        "${workspaceFolder}\\content-helpers.js"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "check: extension scripts",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "check: background.js",
+        "check: popup.js",
+        "check: content-helpers.js"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

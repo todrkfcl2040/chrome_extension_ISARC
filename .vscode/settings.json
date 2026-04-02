@@ -1,0 +1,7 @@
+{
+  "debug.javascript.autoAttachFilter": "smart",
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.env.windows": {
+    "Path": "C:\\Program Files\\nodejs;${env:Path}"
+  }
+}

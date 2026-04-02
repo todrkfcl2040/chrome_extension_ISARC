@@ -134,7 +134,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // 2. ★ [추가됨] 이메일 전송 리스너 (CSP 보안 우회용) ★
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'SEND_EMAIL_VIA_BACKGROUND') {
-    console.log('[Background] 이메일 전송 시작:', request.data.to_email);
+    console.log('[Background] 이메일 전송 시작:', request.data?.template_params?.to_email);
 
     fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
@@ -152,7 +152,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.error('[Background] 네트워크 오류:', error);
     });
 
-    return true; // 비동기 응답 처리
+    return false;
   }
 
   if (request.action === 'SCHEDULE_MIDNIGHT_RESERVE') {

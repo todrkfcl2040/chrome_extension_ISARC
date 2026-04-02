@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Chrome: Load Extension",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "runtimeExecutable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "runtimeArgs": [
+        "--disable-extensions-except=${workspaceFolder}",
+        "--load-extension=${workspaceFolder}",
+        "--user-data-dir=${workspaceFolder}\\.vscode\\chrome-profile"
+      ],
+      "url": "about:blank",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Edge: Load Extension",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "runtimeExecutable": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "runtimeArgs": [
+        "--disable-extensions-except=${workspaceFolder}",
+        "--load-extension=${workspaceFolder}",
+        "--user-data-dir=${workspaceFolder}\\.vscode\\edge-profile"
+      ],
+      "url": "about:blank",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}
