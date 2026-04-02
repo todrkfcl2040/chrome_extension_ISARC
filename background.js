@@ -1,3 +1,6 @@
+// background.js
+
+// 1. 기존 하이라이터 및 초기화 리스너
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "highlightSelection",
@@ -5,83 +8,6 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ["selection"]
   });
 });
-
-/**
- * START_DT_STR 필드에 날짜/시간을 채워 넣는다.
- * @param {string|Date} value  예: "2025-11-06 14:30" 또는 new Date()
- * @param {Object} [opts]
- * @param {string} [opts.format="YYYY-MM-DD HH:mm"]  Date 객체를 문자열로 바꿀 때의 포맷
- */
-function setStartDt(value, opts = {}) {
-  const format = opts.format || "YYYY-MM-DD HH:mm";
-
-  // 1) 타깃 요소 찾기
-  const el =
-    document.querySelector('input[name="START_DT_STR"].i_calendar.datepicker-calendar') ||
-    document.querySelector('input[name="START_DT_STR"]');
-  if (!el) return false;
-
-  // 2) 문자열 만들기
-  const str = typeof value === "string" ? value : formatDate(value, format);
-
-  // 3) React 등 프레임워크 대응: 네이티브 setter로 값 주입
-  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  const prevReadOnly = el.readOnly;
-  el.readOnly = false; // readonly라도 값 주입 위해 잠시 해제
-
-  if (nativeSetter) {
-    nativeSetter.call(el, str);
-  } else {
-    el.value = str;
-  }
-
-  // 4) 이벤트 발사: input → change
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
-
-  // 5) jQuery UI datepicker가 있으면 setDate까지 맞춰주기
-  try {
-    if (window.jQuery && typeof jQuery.fn.datepicker === "function") {
-      // 문자열을 Date로 대충 파싱. 필요시 커스텀 파서로 교체 가능
-      const d = parseDateFromString(str);
-      if (d) jQuery(el).datepicker("setDate", d);
-    }
-  } catch (e) {
-    // 조용히 패스
-  }
-
-  // 6) 원래 상태 복원
-  el.readOnly = prevReadOnly;
-  return true;
-
-  // ===== helpers =====
-  function pad(n) { return n < 10 ? "0" + n : "" + n; }
-  function formatDate(date, fmt) {
-    const d = date instanceof Date ? date : new Date(date);
-    if (Number.isNaN(+d)) throw new Error("Invalid Date");
-    const Y = d.getFullYear();
-    const M = pad(d.getMonth() + 1);
-    const D = pad(d.getDate());
-    const h = pad(d.getHours());
-    const m = pad(d.getMinutes());
-    const s = pad(d.getSeconds());
-    return fmt
-      .replace("YYYY", Y)
-      .replace("MM", M)
-      .replace("DD", D)
-      .replace("HH", h)
-      .replace("mm", m)
-      .replace("ss", s);
-  }
-  function parseDateFromString(s) {
-    // 가장 흔한 "YYYY-MM-DD HH:mm[:ss]" 형태를 우선 지원
-    const m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (!m) return new Date(s); // 브라우저 파서에 위임
-    const [_, Y, MM, DD, HH = "00", mm = "00", ss = "00"] = m;
-    return new Date(+Y, +MM - 1, +DD, +HH, +mm, +ss);
-  }
-}
-
 
 function highlightFunction(term) {
   if (!term) return;
@@ -134,4 +60,120 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
+const MIDNIGHT_ALARM_NAME = 'midnightReserve';
+const MIDNIGHT_STORE_KEY = 'midnightReserve';
+// 2주 범위: 오늘 포함 14일 -> 자정 기준 날짜 + 13일
+const MIDNIGHT_OFFSET_DAYS = 13;
 
+const pad2 = (n) => String(n).padStart(2, '0');
+const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const getTargetDateStr = (baseDate) => {
+  const target = new Date(baseDate);
+  target.setDate(target.getDate() + MIDNIGHT_OFFSET_DAYS);
+  return formatDate(target);
+};
+
+const ensureRelay = async (tabId) => {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'ISOLATED',
+    func: () => {
+      if (window.__gext_relay_attached) return;
+      window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'GEXT_EMAIL_TRIGGER') {
+          chrome.runtime.sendMessage({
+            action: 'SEND_EMAIL_VIA_BACKGROUND',
+            data: event.data.payload
+          });
+        }
+      });
+      window.__gext_relay_attached = true;
+    }
+  });
+};
+
+const runMidnightReservation = async (data) => {
+  if (!data?.tabId) return;
+  const tabId = data.tabId;
+  const startTime = data.startTime;
+  const endTime = data.endTime;
+  const emailConfig = data.emailConfig || {};
+  if (!startTime || !endTime) return;
+
+  try {
+    const dateStr = getTargetDateStr(new Date());
+    await ensureRelay(tabId);
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      files: ['content-helpers.js']
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (opts) => window.__gext?.reserveExactSlot?.(opts),
+      args: [{ dateStr, startTime, endTime, emailConfig }]
+    });
+  } catch (err) {
+    console.error('[Background] Midnight reservation failed:', err);
+  }
+};
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== MIDNIGHT_ALARM_NAME) return;
+  (async () => {
+    const stored = await chrome.storage.local.get([MIDNIGHT_STORE_KEY]);
+    const data = stored[MIDNIGHT_STORE_KEY];
+    if (!data) return;
+    await runMidnightReservation(data);
+    await chrome.storage.local.remove(MIDNIGHT_STORE_KEY);
+    await chrome.alarms.clear(MIDNIGHT_ALARM_NAME);
+  })();
+});
+
+// 2. ★ [추가됨] 이메일 전송 리스너 (CSP 보안 우회용) ★
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'SEND_EMAIL_VIA_BACKGROUND') {
+    console.log('[Background] 이메일 전송 시작:', request.data.to_email);
+
+    fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request.data)
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log('[Background] 전송 성공');
+      } else {
+        response.text().then(text => console.error('[Background] 전송 실패:', text));
+      }
+    })
+    .catch(error => {
+      console.error('[Background] 네트워크 오류:', error);
+    });
+
+    return true; // 비동기 응답 처리
+  }
+
+  if (request.action === 'SCHEDULE_MIDNIGHT_RESERVE') {
+    (async () => {
+      const data = request.data || {};
+      await chrome.alarms.clear(MIDNIGHT_ALARM_NAME);
+      await chrome.storage.local.set({ [MIDNIGHT_STORE_KEY]: data });
+      if (data.alarmAt) {
+        chrome.alarms.create(MIDNIGHT_ALARM_NAME, { when: data.alarmAt });
+      }
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
+  if (request.action === 'CANCEL_MIDNIGHT_RESERVE') {
+    (async () => {
+      await chrome.alarms.clear(MIDNIGHT_ALARM_NAME);
+      await chrome.storage.local.remove(MIDNIGHT_STORE_KEY);
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+});

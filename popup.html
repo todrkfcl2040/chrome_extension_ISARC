@@ -1,36 +1,75 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Highlighter</title>
+  <title>Auto Booker</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
   <div class="wrap">
-    <!-- 기존 highlight UI 옆/아래에 추가 -->
-    <input id="startDtInput" type="text" placeholder="예: 2025-11-06 14:30 혹은 14:30" style="width: 220px;">
-    <button id="fillStartDtBtn">시간 채우기</button>
-    <input id="endDtInput" type="text" placeholder="종료시간 예: 2025-11-06 18:00" style="width:220px;">
-    <button id="fillEndDtBtn">종료시간 채우기</button>
 
-    <input id="freeSlotDate" type="text" placeholder="YYYY-MM-DD (비우면 오늘/선택일)">
-    <input id="freeSlotDuration" type="number" min="10" step="10" value="60" style="width:100px">
-    <input id="freeSlotAfter" type="text" placeholder="우선 HH:mm (선택)">
-    <button id="findFreeSlotBtn">빈 시간 자동 채우기</button>
-    <div style="display:flex; gap:8px; margin-top:8px;">
-      <button id="autoScanStartBtn">자동 스캔 시작</button>
-      <button id="autoScanStopBtn" class="ghost">중지</button>
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+
+    <div class="section">
+      <div class="section-title">빈 시간 찾기</div>
+      <div class="row" style="align-items: center;">
+        <input id="freeSlotDate" type="date" placeholder="날짜 (YYYY-MM-DD)" style="flex: 2;">
+
+        <div style="flex: 1; display: flex; align-items: center; gap: 5px; margin-left: 5px;">
+          <input id="freeSlotDuration" type="number" min="10" step="10" value="60" style="width: 100%;">
+          <span style="font-size: 13px; white-space: nowrap;">분</span>
+        </div>
+      </div>
+
+      <div class="row row-stack" style="margin-top: 5px;">
+        <input id="freeSlotAfter" type="time" step="60" placeholder="이 시간부터 (예: 09:00)">
+        <input id="freeSlotBefore" type="time" step="60" placeholder="이 시간까지 (예: 18:00)">
+      </div>
+
+      <button id="findFreeSlotBtn" style="margin-top:5px; width:100%;">빈 시간 목록 보기</button>
+      <ul id="freeSlotList" style="max-height:100px; overflow:auto; padding-left:16px; margin:5px 0 0 0;"></ul>
     </div>
-    <div id="autoScanStatus" style="font-size:12px; opacity:.8; margin-top:6px;"></div>
 
-    <ul id="freeSlotList" style="max-height:200px; overflow:auto; padding-left:16px;"></ul>
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
 
+    <div class="section">
+      <div class="section-title">알림 / 자동 예약</div>
+      <div>
+        <label style="font-size:12px; font-weight:bold;">알림 받을 이메일</label>
+        <input id="userEmail" type="email" placeholder="example@gmail.com" style="width: 100%; box-sizing: border-box; margin-top:5px; border: 2px solid #ffd700;">
 
+        <input id="emailServiceId" type="hidden" value="service_y5p13h4">
+        <input id="emailTemplateId" type="hidden" value="template_kqbzr1z">
+        <input id="emailPublicKey" type="hidden" value="TQ6aAYV3U0HZ8pGtW">
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button id="autoScanStartBtn" style="flex:1; background:#ffd700; color:#000; font-weight:bold;">자동 예약 시작</button>
+        <button id="autoScanStopBtn" class="ghost" style="flex:1;">중지</button>
+      </div>
+      <div id="autoScanStatus" style="font-size:12px; opacity:.8; margin-top:6px; text-align:center;"></div>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+
+    <div class="section">
+      <div class="section-title">자정 오픈 예약</div>
+      <div id="midnightTargetDate" class="hint"></div>
+      <div class="row" style="margin-top: 4px;">
+        <input id="midnightStartTime" type="time" step="60" placeholder="시작 시간">
+        <input id="midnightEndTime" type="time" step="60" placeholder="종료 시간">
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button id="midnightReserveStartBtn" style="flex:1; background:#ffe27a; color:#000; font-weight:bold;">자정 예약 시작</button>
+        <button id="midnightReserveCancelBtn" class="ghost" style="flex:1;">취소</button>
+      </div>
+      <div id="midnightReserveStatus" class="hint" style="text-align:center;"></div>
+    </div>
   </div>
   <script type="module" src="popup.js"></script>
 </body>
-
 </html>

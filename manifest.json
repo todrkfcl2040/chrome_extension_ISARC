@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Page Highlighter (Starter)",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Highlight any word on the current page from the popup or context menu.",
   "action": {
     "default_popup": "popup.html",
@@ -11,7 +11,8 @@
     "scripting",
     "activeTab",
     "storage",
-    "contextMenus"
+    "contextMenus",
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"
