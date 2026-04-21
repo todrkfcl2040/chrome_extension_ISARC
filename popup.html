@@ -9,65 +9,122 @@
 </head>
 
 <body>
-  <div class="wrap">
+  <div class="layout">
+    <div class="column column-left">
+      <div class="section card">
+        <div class="section-title">다가오는 장비교육 신청 오픈</div>
+        <div class="row align-center">
+          <div class="grow-1">
+            <div id="upcomingEducationList" class="education-checklist">
+              <div class="education-checklist-empty">신청 오픈 목록 불러오는 중...</div>
+            </div>
+          </div>
+          <button id="refreshUpcomingEducationBtn" class="ghost button-compact">새로고침</button>
+        </div>
+        <div id="upcomingEducationHint" class="hint">가장 가까운 신청 오픈 예정 순서로 표시합니다.</div>
+        <div id="upcomingEducationMeta" class="hint hint-tight"></div>
+        <label class="field-label" for="educationFixedAccountCode">고정 계정코드</label>
+        <input id="educationFixedAccountCode" type="text" value="OW-2020-0006(CASH-IU-9313)" placeholder="장비교육 신청에 사용할 계정코드">
+        <div class="hint hint-tight">고정 계정코드가 있으면 팝업 대신 바로 주입합니다.</div>
+        <div class="row row-gap-top">
+          <button id="educationOpenReserveStartBtn" class="button-secondary">오픈 즉시 신청</button>
+          <button id="educationOpenReserveCancelBtn" class="ghost">취소</button>
+        </div>
+        <div id="educationOpenReserveStatus" class="hint"></div>
+      </div>
+    </div>
 
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+    <div class="column column-right">
+      <div class="section card card-wide">
+        <div class="section-title">빈 시간 찾기</div>
+        <label class="field-label" for="freeSlotRoute">공정 / 장비</label>
+        <div class="row align-center">
+          <select id="freeSlotRoute" class="grow-1">
+            <option value="">현재 상세 패널 사용</option>
+          </select>
+          <button id="refreshRouteListBtn" class="ghost button-compact">목록 새로고침</button>
+        </div>
+        <div id="freeSlotRouteHint" class="hint hint-tight">공정 목록을 불러오는 중...</div>
+        <div class="row align-center">
+          <input id="freeSlotDate" type="date" placeholder="날짜 (YYYY-MM-DD)" class="grow-2">
 
-    <div class="section">
-      <div class="section-title">빈 시간 찾기</div>
-      <div class="row" style="align-items: center;">
-        <input id="freeSlotDate" type="date" placeholder="날짜 (YYYY-MM-DD)" style="flex: 2;">
+          <div class="inline-field grow-1">
+            <input id="freeSlotDuration" type="number" min="10" step="10" value="60">
+            <span class="unit-label">분</span>
+          </div>
+        </div>
 
-        <div style="flex: 1; display: flex; align-items: center; gap: 5px; margin-left: 5px;">
-          <input id="freeSlotDuration" type="number" min="10" step="10" value="60" style="width: 100%;">
-          <span style="font-size: 13px; white-space: nowrap;">분</span>
+        <div class="row row-stack row-gap-top">
+          <input id="freeSlotAfter" type="time" step="60" placeholder="이 시간부터 (예: 09:00)">
+          <input id="freeSlotBefore" type="time" step="60" placeholder="이 시간까지 (예: 18:00)">
+        </div>
+
+        <button id="findFreeSlotBtn" class="full-width button-gap-top">빈 시간 목록 보기</button>
+        <ul id="freeSlotList" class="slot-list"></ul>
+      </div>
+
+      <div class="reservation-grid">
+        <div class="section card">
+        <div class="section-title">알림 / 자동 예약</div>
+        <div>
+          <label class="field-label" for="userEmail">알림 받을 이메일</label>
+          <input id="userEmail" type="email" placeholder="example@gmail.com" class="email-input">
+
+            <input id="emailServiceId" type="hidden" value="service_y5p13h4">
+            <input id="emailTemplateId" type="hidden" value="template_kqbzr1z">
+            <input id="emailPublicKey" type="hidden" value="TQ6aAYV3U0HZ8pGtW">
+          </div>
+
+          <div class="row row-gap-top">
+            <button id="autoScanStartBtn" class="button-primary">자동 예약 시작</button>
+            <button id="autoScanStopBtn" class="ghost">중지</button>
+          </div>
+          <div id="autoScanStatus" class="hint hint-center"></div>
+          <div class="section-subtitle">로그인 유지</div>
+          <div class="hint hint-tight">브라우저가 켜져 있는 동안 보호 페이지를 주기적으로 호출합니다.</div>
+          <div class="row row-gap-top align-center">
+            <div class="inline-field grow-1">
+              <input id="loginKeepAliveIntervalMin" type="number" min="1" step="1" value="10">
+              <span class="unit-label">분</span>
+            </div>
+          </div>
+          <div class="row row-gap-top">
+            <button id="loginKeepAliveStartBtn" class="button-secondary">유지 시작</button>
+            <button id="loginKeepAliveStopBtn" class="ghost">중지</button>
+          </div>
+          <div id="loginKeepAliveStatus" class="hint hint-center"></div>
+        </div>
+
+        <div class="section card">
+          <div class="section-title">자정 오픈 예약</div>
+          <div id="midnightTargetDate" class="hint hint-no-top"></div>
+          <div class="row row-gap-top">
+            <input id="midnightStartTime" type="time" step="60" placeholder="시작 시간">
+            <input id="midnightEndTime" type="time" step="60" placeholder="종료 시간">
+          </div>
+
+          <div class="row row-gap-top">
+            <button id="midnightReserveStartBtn" class="button-secondary">자정 예약 시작</button>
+            <button id="midnightReserveCancelBtn" class="ghost">취소</button>
+          </div>
+          <div id="midnightReserveStatus" class="hint hint-center"></div>
         </div>
       </div>
 
-      <div class="row row-stack" style="margin-top: 5px;">
-        <input id="freeSlotAfter" type="time" step="60" placeholder="이 시간부터 (예: 09:00)">
-        <input id="freeSlotBefore" type="time" step="60" placeholder="이 시간까지 (예: 18:00)">
+      <div class="section card card-wide">
+        <div class="section-title">청정실 일괄 신청</div>
+        <div class="hint hint-no-top">현재 탭에서 `야간/공휴일 청정실 사용신청` 폼을 한 번 채운 뒤 날짜 범위를 지정해 순차 신청합니다.</div>
+        <div class="hint hint-tight">신청자 정보, 지도교수, PID/사용목적, 장비 예정 내용, 동의 체크는 현재 페이지 값을 템플릿으로 재사용합니다.</div>
+        <div class="row row-gap-top">
+          <input id="cleanRoomBatchStartDate" type="date" placeholder="시작일">
+          <input id="cleanRoomBatchEndDate" type="date" placeholder="종료일">
+        </div>
+        <div class="row row-gap-top">
+          <button id="cleanRoomBatchApplyBtn" class="button-secondary">범위 일괄 신청</button>
+        </div>
+        <div id="cleanRoomBatchStatus" class="hint"></div>
+        <ul id="cleanRoomBatchResultList" class="slot-list result-list"></ul>
       </div>
-
-      <button id="findFreeSlotBtn" style="margin-top:5px; width:100%;">빈 시간 목록 보기</button>
-      <ul id="freeSlotList" style="max-height:100px; overflow:auto; padding-left:16px; margin:5px 0 0 0;"></ul>
-    </div>
-
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
-
-    <div class="section">
-      <div class="section-title">알림 / 자동 예약</div>
-      <div>
-        <label style="font-size:12px; font-weight:bold;">알림 받을 이메일</label>
-        <input id="userEmail" type="email" placeholder="example@gmail.com" style="width: 100%; box-sizing: border-box; margin-top:5px; border: 2px solid #ffd700;">
-
-        <input id="emailServiceId" type="hidden" value="service_y5p13h4">
-        <input id="emailTemplateId" type="hidden" value="template_kqbzr1z">
-        <input id="emailPublicKey" type="hidden" value="TQ6aAYV3U0HZ8pGtW">
-      </div>
-
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button id="autoScanStartBtn" style="flex:1; background:#ffd700; color:#000; font-weight:bold;">자동 예약 시작</button>
-        <button id="autoScanStopBtn" class="ghost" style="flex:1;">중지</button>
-      </div>
-      <div id="autoScanStatus" style="font-size:12px; opacity:.8; margin-top:6px; text-align:center;"></div>
-    </div>
-
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
-
-    <div class="section">
-      <div class="section-title">자정 오픈 예약</div>
-      <div id="midnightTargetDate" class="hint"></div>
-      <div class="row" style="margin-top: 4px;">
-        <input id="midnightStartTime" type="time" step="60" placeholder="시작 시간">
-        <input id="midnightEndTime" type="time" step="60" placeholder="종료 시간">
-      </div>
-
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button id="midnightReserveStartBtn" style="flex:1; background:#ffe27a; color:#000; font-weight:bold;">자정 예약 시작</button>
-        <button id="midnightReserveCancelBtn" class="ghost" style="flex:1;">취소</button>
-      </div>
-      <div id="midnightReserveStatus" class="hint" style="text-align:center;"></div>
     </div>
   </div>
   <script type="module" src="popup.js"></script>
