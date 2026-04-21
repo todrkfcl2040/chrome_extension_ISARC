@@ -6,6 +6,7 @@ const UPCOMING_EDUCATION_CHECKED_KEY = 'upcomingEducationCheckedIds';
 const LOGIN_KEEP_ALIVE_INTERVAL_KEY = 'loginKeepAliveIntervalMin';
 const LOGIN_KEEP_ALIVE_DEFAULT_INTERVAL_MIN = 10;
 const CLEAN_ROOM_BATCH_MAX_LOG = 60;
+const GITHUB_REPO_URL = 'https://github.com/todrkfcl2040/chrome_extension_ISARC';
 
 const upcomingEducationMap = new Map();
 const upcomingEducationCheckedIds = new Set();
@@ -298,6 +299,38 @@ async function refreshUpcomingEducationOptions() {
     setText('upcomingEducationMeta', '');
   } finally {
     setDisabled('refreshUpcomingEducationBtn', false);
+  }
+}
+
+async function refreshGithubUpdateInfo({ tryManagedUpdate = false } = {}) {
+  try {
+    setDisabled('checkGithubUpdateBtn', true);
+    setText('githubUpdateVersion', '버전 확인 중...');
+    setText('githubUpdateStatus', '');
+    setText('githubUpdateMeta', '');
+
+    const action = tryManagedUpdate ? 'CHECK_GITHUB_UPDATE' : 'GET_GITHUB_UPDATE_INFO';
+    const info = await sendRuntimeMessage({
+      action,
+      data: { tryManagedUpdate }
+    });
+
+    if (!info?.ok) {
+      setText('githubUpdateVersion', 'GitHub 최신 확인 실패');
+      setText('githubUpdateStatus', info?.message || info?.error || '알 수 없는 오류');
+      setText('githubUpdateMeta', '');
+      return;
+    }
+
+    setText('githubUpdateVersion', `로컬 ${info.currentVersion} / GitHub ${info.latestVersion}`);
+    setText('githubUpdateStatus', info.message || '');
+    setText('githubUpdateMeta', info.checkedAtText ? `마지막 확인: ${info.checkedAtText}` : '');
+  } catch (error) {
+    setText('githubUpdateVersion', 'GitHub 최신 확인 실패');
+    setText('githubUpdateStatus', error.message);
+    setText('githubUpdateMeta', '');
+  } finally {
+    setDisabled('checkGithubUpdateBtn', false);
   }
 }
 
@@ -607,6 +640,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('refreshUpcomingEducationBtn')?.addEventListener('click', () => {
     refreshUpcomingEducationOptions();
   });
+  document.getElementById('checkGithubUpdateBtn')?.addEventListener('click', () => {
+    refreshGithubUpdateInfo({ tryManagedUpdate: true });
+  });
+  document.getElementById('openGithubRepoBtn')?.addEventListener('click', async () => {
+    await chrome.tabs.create({ url: GITHUB_REPO_URL });
+  });
   document.getElementById('refreshRouteListBtn')?.addEventListener('click', () => {
     refreshReservationRoutes();
   });
@@ -697,6 +736,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setText('midnightTargetDate', '서버 시간 확인 중...');
 
   await Promise.all([
+    refreshGithubUpdateInfo(),
     refreshUpcomingEducationOptions(),
     refreshReservationRoutes(),
     refreshEducationOpenReserveInfo(),

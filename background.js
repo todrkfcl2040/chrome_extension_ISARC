@@ -4,6 +4,16 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Highlight selection',
     contexts: ['selection']
   });
+
+  ensureGithubUpdateMonitoring().catch((error) => {
+    console.warn('[Background] GitHub update monitor init failed on install.', error);
+  });
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureGithubUpdateMonitoring().catch((error) => {
+    console.warn('[Background] GitHub update monitor init failed on startup.', error);
+  });
 });
 
 function highlightFunction(term) {
@@ -79,6 +89,12 @@ const LOGIN_KEEP_ALIVE_STORE_KEY = 'loginKeepAlive';
 const LOGIN_KEEP_ALIVE_DEFAULT_INTERVAL_MIN = 10;
 const LOGIN_KEEP_ALIVE_URL = new URL('/myPage/hm/user/info', ISRC_BASE_URL).toString();
 const ISRC_ORIGIN = new URL(ISRC_BASE_URL).origin;
+const GITHUB_REPO_URL = 'https://github.com/todrkfcl2040/chrome_extension_ISARC';
+const GITHUB_MANIFEST_URL =
+  'https://raw.githubusercontent.com/todrkfcl2040/chrome_extension_ISARC/main/manifest.json';
+const GITHUB_UPDATE_STORE_KEY = 'githubUpdateInfo';
+const GITHUB_UPDATE_ALARM_NAME = 'githubUpdateCheck';
+const GITHUB_UPDATE_INTERVAL_MIN = 360;
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const formatDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -97,6 +113,155 @@ const parseDateTime = (value) => {
   }
 
   return new Date(year, month - 1, day, hour, minute, second, 0);
+};
+
+const parseVersionParts = (value) =>
+  String(value || '')
+    .split('.')
+    .map((part) => Number.parseInt(part, 10))
+    .filter((part) => Number.isFinite(part));
+
+const compareVersions = (left, right) => {
+  const leftParts = parseVersionParts(left);
+  const rightParts = parseVersionParts(right);
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftValue = leftParts[index] || 0;
+    const rightValue = rightParts[index] || 0;
+    if (leftValue > rightValue) return 1;
+    if (leftValue < rightValue) return -1;
+  }
+
+  return 0;
+};
+
+const setGithubUpdateBadge = async (updateAvailable) => {
+  await chrome.action.setBadgeText({ text: updateAvailable ? 'NEW' : '' });
+  if (updateAvailable) {
+    await chrome.action.setBadgeBackgroundColor({ color: '#b91c1c' });
+  }
+};
+
+const tryChromeManagedUpdate = () =>
+  new Promise((resolve) => {
+    if (typeof chrome.runtime.requestUpdateCheck !== 'function') {
+      resolve({ attempted: false, status: 'unsupported' });
+      return;
+    }
+
+    chrome.runtime.requestUpdateCheck((status, details) => {
+      resolve({
+        attempted: true,
+        status,
+        version: details?.version || ''
+      });
+    });
+  });
+
+const buildGithubUpdateMessage = (info) => {
+  if (!info.ok) {
+    return `GitHub 최신 확인 실패: ${info.error}`;
+  }
+
+  if (!info.updateAvailable) {
+    return 'GitHub 기준 최신 상태입니다.';
+  }
+
+  if (info.chromeUpdateStatus === 'update_available') {
+    return `Chrome 업데이트 경로에서 ${info.latestVersion} 반영을 감지했습니다. 확장 재시작 후 적용될 수 있습니다.`;
+  }
+
+  if (info.chromeUpdateStatus === 'throttled') {
+    return `GitHub에는 ${info.latestVersion}가 있습니다. Chrome 업데이트 확인은 잠시 후 다시 시도해야 합니다.`;
+  }
+
+  return `GitHub에는 ${info.latestVersion}가 있습니다. 현재 로컬/압축해제 확장은 파일 자동 교체가 안 되므로 update-from-github.ps1로 갱신하세요.`;
+};
+
+const fetchGithubUpdateInfo = async ({ tryManagedUpdate = false } = {}) => {
+  const currentVersion = chrome.runtime.getManifest().version;
+  const checkedAt = new Date();
+  const baseInfo = {
+    checkedAtMs: checkedAt.getTime(),
+    checkedAtText: formatDateTime(checkedAt),
+    currentVersion,
+    latestVersion: currentVersion,
+    updateAvailable: false,
+    repoUrl: GITHUB_REPO_URL,
+    ok: false,
+    error: '',
+    chromeUpdateAttempted: false,
+    chromeUpdateStatus: '',
+    chromeUpdateVersion: ''
+  };
+
+  try {
+    const response = await fetch(GITHUB_MANIFEST_URL, {
+      method: 'GET',
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      throw new Error(`manifest.json 조회 실패 (${response.status})`);
+    }
+
+    const manifest = await response.json();
+    const latestVersion = String(manifest?.version || '').trim();
+    if (!latestVersion) {
+      throw new Error('GitHub manifest.json 에 version 값이 없습니다.');
+    }
+
+    const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+    const info = {
+      ...baseInfo,
+      ok: true,
+      latestVersion,
+      updateAvailable
+    };
+
+    if (tryManagedUpdate && updateAvailable) {
+      const chromeUpdateResult = await tryChromeManagedUpdate();
+      info.chromeUpdateAttempted = chromeUpdateResult.attempted;
+      info.chromeUpdateStatus = chromeUpdateResult.status || '';
+      info.chromeUpdateVersion = chromeUpdateResult.version || '';
+    }
+
+    info.message = buildGithubUpdateMessage(info);
+    return info;
+  } catch (error) {
+    return {
+      ...baseInfo,
+      ok: false,
+      error: error.message,
+      message: buildGithubUpdateMessage({
+        ...baseInfo,
+        ok: false,
+        error: error.message
+      })
+    };
+  }
+};
+
+const storeGithubUpdateInfo = async (info) => {
+  await chrome.storage.local.set({
+    [GITHUB_UPDATE_STORE_KEY]: info
+  });
+  await setGithubUpdateBadge(Boolean(info?.updateAvailable));
+  return info;
+};
+
+const checkGithubUpdate = async (options = {}) => {
+  const info = await fetchGithubUpdateInfo(options);
+  return storeGithubUpdateInfo(info);
+};
+
+const ensureGithubUpdateMonitoring = async () => {
+  chrome.alarms.create(GITHUB_UPDATE_ALARM_NAME, {
+    delayInMinutes: 1,
+    periodInMinutes: GITHUB_UPDATE_INTERVAL_MIN
+  });
+  await checkGithubUpdate();
 };
 
 const getTargetDateStr = (baseDate) => {
@@ -706,6 +871,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   })();
 });
 
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== GITHUB_UPDATE_ALARM_NAME) return;
+
+  checkGithubUpdate().catch((error) => {
+    console.warn('[Background] Scheduled GitHub update check failed.', error);
+  });
+});
+
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === 'SEND_EMAIL_VIA_BACKGROUND') {
     console.log('[Background] 이메일 전송 시작:', request.data?.template_params?.to_email);
@@ -727,6 +900,35 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       });
 
     return false;
+  }
+
+  if (request.action === 'GET_GITHUB_UPDATE_INFO') {
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get([GITHUB_UPDATE_STORE_KEY]);
+        const cached = stored[GITHUB_UPDATE_STORE_KEY];
+        if (cached) {
+          sendResponse(cached);
+          return;
+        }
+
+        sendResponse(await checkGithubUpdate());
+      } catch (error) {
+        sendResponse({ ok: false, error: error.message, message: `GitHub 최신 확인 실패: ${error.message}` });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'CHECK_GITHUB_UPDATE') {
+    (async () => {
+      try {
+        sendResponse(await checkGithubUpdate({ tryManagedUpdate: Boolean(request.data?.tryManagedUpdate) }));
+      } catch (error) {
+        sendResponse({ ok: false, error: error.message, message: `GitHub 최신 확인 실패: ${error.message}` });
+      }
+    })();
+    return true;
   }
 
   if (request.action === 'GET_MIDNIGHT_RESERVE_INFO') {
