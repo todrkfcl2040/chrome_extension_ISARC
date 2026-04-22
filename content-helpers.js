@@ -1952,6 +1952,8 @@
       }
     }
 
+    throw new Error('Failed to resolve advisor account without popup.');
+
     const accountSearchButton = getCleanRoomInput('#accountSearch');
     if (!accountSearchButton) {
       throw new Error('지도교수(계정) 검색 버튼을 찾지 못했습니다.');
