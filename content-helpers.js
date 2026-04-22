@@ -1470,6 +1470,7 @@
     useContents: '반도체 공정'
   });
   const CLEAN_ROOM_DEFAULT_ADVISOR_EMAIL = 'sooyeon.lee@snu.ac.kr';
+  const CLEAN_ROOM_DEFAULT_USAGE_TIME = '20-21시';
   const enumerateDateRange = (startDate, endDate) => {
     const start = parseDateTime(`${startDate} 00:00:00`);
     const end = parseDateTime(`${endDate} 00:00:00`);
@@ -1688,6 +1689,21 @@
       setNativeFieldValue(advisorEmailInput, fallbackEmail);
     }
   };
+  const getCleanRoomRequesterName = () =>
+    normalizeText(getCleanRoomRoot()?.querySelector('#reqUserName')?.textContent || '');
+  const ensureCleanRoomRequesterFields = () => {
+    const usageTimeInput = getCleanRoomInput('#reqFrm input[name="usageTime"]');
+    const reqSignInput = getCleanRoomInput('input[name="reqSign"]');
+    const requesterName = getCleanRoomRequesterName();
+
+    if (usageTimeInput) {
+      setNativeFieldValue(usageTimeInput, CLEAN_ROOM_DEFAULT_USAGE_TIME);
+    }
+
+    if (reqSignInput && requesterName) {
+      setNativeFieldValue(reqSignInput, requesterName);
+    }
+  };
   const ensureCleanRoomAgreements = () => {
     ['#agree1', '#agree2'].forEach((selector) => {
       const checkbox = getCleanRoomInput(selector);
@@ -1777,6 +1793,7 @@
 
       try {
         applyCleanRoomDateToPage(template, dateStr);
+        ensureCleanRoomRequesterFields();
         ensureCleanRoomAdvisorEmail();
         ensureCleanRoomAgreements();
 
@@ -1847,6 +1864,7 @@
 
       try {
         applyCleanRoomDateToPage(template, dateStr);
+        ensureCleanRoomRequesterFields();
         ensureCleanRoomAdvisorEmail();
         ensureCleanRoomAgreements();
 
