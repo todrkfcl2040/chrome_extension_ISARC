@@ -11,6 +11,19 @@ const GITHUB_REPO_URL = 'https://github.com/todrkfcl2040/chrome_extension_ISARC'
 const upcomingEducationMap = new Map();
 const upcomingEducationCheckedIds = new Set();
 let cachedReservationRoutes = [];
+const POPUP_STATE_FIELD_IDS = Object.freeze([
+  'userEmail',
+  'educationFixedAccountCode',
+  'freeSlotRoute',
+  'freeSlotDate',
+  'freeSlotDuration',
+  'freeSlotAfter',
+  'freeSlotBefore',
+  'cleanRoomBatchStartDate',
+  'cleanRoomBatchEndDate',
+  'midnightStartTime',
+  'midnightEndTime'
+]);
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -472,6 +485,7 @@ function renderReservationRouteOptions(routes = [], preferredValue = '') {
       ? activeValue
       : '';
   select.value = nextValue;
+  select.dataset.preferredValue = nextValue;
 
   if (!cachedReservationRoutes.length) {
     setText(
@@ -493,7 +507,7 @@ async function refreshReservationRoutes() {
   const select = document.getElementById('freeSlotRoute');
   if (!select) return;
 
-  const previousValue = getSelectedRouteId();
+  const previousValue = getSelectedRouteId() || select.dataset.preferredValue || '';
   setDisabled('refreshRouteListBtn', true);
   select.disabled = true;
   setText('freeSlotRouteHint', '공정 목록을 불러오는 중...');
@@ -530,13 +544,50 @@ function getLoginKeepAliveIntervalMin() {
   return Math.max(1, parsed);
 }
 
+function getPopupStateSnapshot() {
+  const snapshot = Object.fromEntries(
+    POPUP_STATE_FIELD_IDS.map((id) => [id, getValue(id)])
+  );
+
+  snapshot[LOGIN_KEEP_ALIVE_INTERVAL_KEY] = getLoginKeepAliveIntervalMin();
+  snapshot[UPCOMING_EDUCATION_CHECKED_KEY] = [...upcomingEducationCheckedIds];
+  return snapshot;
+}
+
 function persistPopupState() {
-  chrome.storage.local.set({
-    userEmail: getValue('userEmail'),
-    educationFixedAccountCode: getValue('educationFixedAccountCode'),
-    [LOGIN_KEEP_ALIVE_INTERVAL_KEY]: getLoginKeepAliveIntervalMin(),
-    [UPCOMING_EDUCATION_CHECKED_KEY]: [...upcomingEducationCheckedIds]
+  chrome.storage.local.set(getPopupStateSnapshot());
+}
+
+function restorePopupState(storedState = {}) {
+  POPUP_STATE_FIELD_IDS.forEach((id) => {
+    const value = storedState?.[id];
+    if (typeof value !== 'string') return;
+
+    const element = document.getElementById(id);
+    if (!element) return;
+
+    if (id === 'freeSlotRoute') {
+      element.dataset.preferredValue = value;
+      return;
+    }
+
+    element.value = value;
   });
+}
+
+function shouldPersistPopupField(element) {
+  return Boolean(element?.id && POPUP_STATE_FIELD_IDS.includes(element.id)) || element?.id === 'loginKeepAliveIntervalMin';
+}
+
+function bindPopupStatePersistence() {
+  const handler = (event) => {
+    const element = event.target;
+    if (!shouldPersistPopupField(element)) return;
+    persistPopupState();
+  };
+
+  document.addEventListener('input', handler, true);
+  document.addEventListener('change', handler, true);
 }
 
 async function refreshMidnightReserveInfo() {
@@ -560,8 +611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const storedState = await new Promise((resolve) => {
     chrome.storage.local.get(
       [
-        'userEmail',
-        'educationFixedAccountCode',
+        ...POPUP_STATE_FIELD_IDS,
         LOGIN_KEEP_ALIVE_INTERVAL_KEY,
         UPCOMING_EDUCATION_CHECKED_KEY
       ],
@@ -570,20 +620,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   const {
-    userEmail,
-    educationFixedAccountCode,
     [LOGIN_KEEP_ALIVE_INTERVAL_KEY]: loginKeepAliveIntervalMin,
     [UPCOMING_EDUCATION_CHECKED_KEY]: storedCheckedEducationIds = []
   } = storedState;
 
-  if (userEmail) {
-    const emailInput = document.getElementById('userEmail');
-    if (emailInput) emailInput.value = userEmail;
-  }
-  if (educationFixedAccountCode) {
-    const accountCodeInput = document.getElementById('educationFixedAccountCode');
-    if (accountCodeInput) accountCodeInput.value = educationFixedAccountCode;
-  }
+  restorePopupState(storedState);
   if (loginKeepAliveIntervalMin) {
     const intervalInput = document.getElementById('loginKeepAliveIntervalMin');
     if (intervalInput) intervalInput.value = String(loginKeepAliveIntervalMin);
@@ -617,8 +658,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         cleanRoomBatchEndDateInput.value = cleanRoomBatchStartDateInput.value;
       }
       cleanRoomBatchEndDateInput.min = cleanRoomBatchStartDateInput.value || today;
+      persistPopupState();
     });
   }
+
+  bindPopupStatePersistence();
 
   document.getElementById('upcomingEducationList')?.addEventListener('change', (event) => {
     const checkbox = event.target.closest('input[type="checkbox"][data-education-id]');
