@@ -1732,6 +1732,72 @@
         return id.includes('AccountSelectSave') || text === '선택';
       }
     ) || null;
+  const getAccountPopupSelectionState = () => {
+    const jq = window.jQuery || window.$;
+    const popup = document.getElementById('popAccountSelect');
+    const grid = document.getElementById('accountGrid');
+    if (!jq || !popup || !grid) return null;
+
+    try {
+      const rows = jq(grid).datagrid('getRows');
+      if (Array.isArray(rows) && rows.length) {
+        return {
+          jq,
+          popup,
+          grid,
+          rows,
+          firstRow: rows[0]
+        };
+      }
+    } catch (_) {}
+
+    return null;
+  };
+  const closeAccountPopup = (popupState = null) => {
+    const jq = popupState?.jq || window.jQuery || window.$;
+    const popup = popupState?.popup || document.getElementById('popAccountSelect');
+
+    if (jq && popup) {
+      try {
+        jq(popup).dialog('close');
+      } catch (_) {}
+      try {
+        jq(popup).dialog('destroy');
+      } catch (_) {}
+    }
+
+    const closeButton = document.getElementById('btnAccountSelectClose');
+    if (closeButton && isElementVisible(closeButton)) {
+      triggerElementClick(closeButton);
+    }
+  };
+  const applyAccountPopupSelection = (popupState) => {
+    if (!popupState?.firstRow) return false;
+
+    const { jq, popup, grid, firstRow } = popupState;
+
+    try {
+      jq(grid).datagrid('selectRow', 0);
+    } catch (_) {}
+    try {
+      jq(grid).datagrid('checkRow', 0);
+    } catch (_) {}
+
+    try {
+      const setAccount = typeof popup.returnFunction === 'function' ? popup.returnFunction('setAccount') : null;
+      if (typeof setAccount === 'function') {
+        setAccount([firstRow]);
+        closeAccountPopup(popupState);
+        return true;
+      }
+    } catch (_) {}
+
+    const saveButton = findVisibleAccountSaveButton(getActivePopupRoot());
+    if (!saveButton) return false;
+
+    triggerElementClick(saveButton);
+    return true;
+  };
   const trySelectFirstAccountRow = (root = document) => {
     const jq = window.jQuery || window.$;
     if (jq) {
@@ -1787,16 +1853,28 @@
       throw new Error('지도교수(계정) 선택 팝업을 열지 못했습니다.');
     }
 
-    const popupRoot = getActivePopupRoot();
-    await waitFor(
-      () => {
-        const selected = trySelectFirstAccountRow(popupRoot);
-        return selected ? true : null;
-      },
+    const popupState = await waitFor(
+      () => getAccountPopupSelectionState(),
       { timeoutMs: 5000, intervalMs: 150 }
     );
 
-    triggerElementClick(saveButton);
+    if (popupState) {
+      const applied = applyAccountPopupSelection(popupState);
+      if (!applied) {
+        throw new Error('Failed to apply advisor account selection.');
+      }
+    } else {
+      const popupRoot = getActivePopupRoot();
+      await waitFor(
+        () => {
+          const selected = trySelectFirstAccountRow(popupRoot);
+          return selected ? true : null;
+        },
+        { timeoutMs: 5000, intervalMs: 150 }
+      );
+
+      triggerElementClick(saveButton);
+    }
 
     const resolved = await waitFor(
       () => {
