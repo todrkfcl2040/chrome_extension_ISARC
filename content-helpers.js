@@ -1704,6 +1704,115 @@
       setNativeFieldValue(reqSignInput, requesterName);
     }
   };
+  const isElementVisible = (element) => {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  const triggerElementClick = (element) => {
+    if (!element) return false;
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    element.click();
+    return true;
+  };
+  const getActivePopupRoot = () => {
+    const candidates = Array.from(document.querySelectorAll('.window, .panel.window, .window-body, .panel-body'))
+      .filter((element) => isElementVisible(element));
+    return candidates[candidates.length - 1] || document.body;
+  };
+  const findVisibleAccountSaveButton = (root = document) =>
+    Array.from(root.querySelectorAll('#btnAccountSelectSave, #accountSelectSave, a, button, input[type="button"], input[type="submit"]')).find(
+      (element) => {
+        if (!isElementVisible(element)) return false;
+        const id = normalizeText(element.id || '');
+        const text = normalizeText(element.textContent || element.value || '');
+        return id.includes('AccountSelectSave') || text === '선택';
+      }
+    ) || null;
+  const trySelectFirstAccountRow = (root = document) => {
+    const jq = window.jQuery || window.$;
+    if (jq) {
+      const grids = jq(root).find('.datagrid-f').filter(function () {
+        return jq(this).is(':visible');
+      });
+      for (let index = 0; index < grids.length; index += 1) {
+        try {
+          jq(grids[index]).datagrid('selectRow', 0);
+          return true;
+        } catch (_) {}
+      }
+    }
+
+    const row = Array.from(root.querySelectorAll('.datagrid-row, tbody tr, table tr')).find((element) => {
+      if (!isElementVisible(element)) return false;
+      const text = normalizeText(element.textContent || '');
+      if (!text) return false;
+      if (text.includes('선택') || text.includes('닫기')) return false;
+      return true;
+    });
+    if (!row) return false;
+
+    const selector = row.querySelector('input[type="radio"], input[type="checkbox"]');
+    if (selector) {
+      selector.checked = true;
+      selector.dispatchEvent(new Event('input', { bubbles: true }));
+      selector.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    triggerElementClick(row);
+    return true;
+  };
+  const ensureCleanRoomAdvisorAccount = async () => {
+    const acctSkey = getCleanRoomInputValue('input[name="acctSkey"]');
+    const advisorSkey = getCleanRoomInputValue('input[name="advisorSkey"]');
+    if (acctSkey && advisorSkey) return true;
+
+    const accountSearchButton = getCleanRoomInput('#accountSearch');
+    if (!accountSearchButton) {
+      throw new Error('지도교수(계정) 검색 버튼을 찾지 못했습니다.');
+    }
+
+    triggerElementClick(accountSearchButton);
+
+    const saveButton = await waitFor(() => {
+      const popupRoot = getActivePopupRoot();
+      return findVisibleAccountSaveButton(popupRoot);
+    }, {
+      timeoutMs: 8000,
+      intervalMs: 150
+    });
+    if (!saveButton) {
+      throw new Error('지도교수(계정) 선택 팝업을 열지 못했습니다.');
+    }
+
+    const popupRoot = getActivePopupRoot();
+    await waitFor(
+      () => {
+        const selected = trySelectFirstAccountRow(popupRoot);
+        return selected ? true : null;
+      },
+      { timeoutMs: 5000, intervalMs: 150 }
+    );
+
+    triggerElementClick(saveButton);
+
+    const resolved = await waitFor(
+      () => {
+        const nextAcctSkey = getCleanRoomInputValue('input[name="acctSkey"]');
+        const nextAdvisorSkey = getCleanRoomInputValue('input[name="advisorSkey"]');
+        return nextAcctSkey && nextAdvisorSkey ? { acctSkey: nextAcctSkey, advisorSkey: nextAdvisorSkey } : null;
+      },
+      { timeoutMs: 8000, intervalMs: 150 }
+    );
+
+    if (!resolved) {
+      throw new Error('지도교수(계정)를 자동 선택하지 못했습니다.');
+    }
+
+    return true;
+  };
   const ensureCleanRoomAgreements = () => {
     ['#agree1', '#agree2'].forEach((selector) => {
       const checkbox = getCleanRoomInput(selector);
@@ -1794,6 +1903,7 @@
       try {
         applyCleanRoomDateToPage(template, dateStr);
         ensureCleanRoomRequesterFields();
+        await ensureCleanRoomAdvisorAccount();
         ensureCleanRoomAdvisorEmail();
         ensureCleanRoomAgreements();
 
@@ -1865,6 +1975,7 @@
       try {
         applyCleanRoomDateToPage(template, dateStr);
         ensureCleanRoomRequesterFields();
+        await ensureCleanRoomAdvisorAccount();
         ensureCleanRoomAdvisorEmail();
         ensureCleanRoomAgreements();
 
