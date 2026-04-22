@@ -1469,6 +1469,10 @@
     equipName: 'Wet station',
     useContents: '반도체 공정'
   });
+  const CLEAN_ROOM_DEFAULT_ACCOUNT_CODE = 'OW-2020-0006(CASH-IU-9313)';
+  const CLEAN_ROOM_DEFAULT_ADVISOR_NAME = '이수연';
+  const CLEAN_ROOM_DEFAULT_ADVISOR_MOBILE = '010-7112-1016';
+  const CLEAN_ROOM_DEFAULT_ADVISOR_SKEY = '1134';
   const CLEAN_ROOM_DEFAULT_ADVISOR_EMAIL = 'sooyeon.lee@snu.ac.kr';
   const CLEAN_ROOM_DEFAULT_USAGE_TIME = '20-21시';
   const enumerateDateRange = (startDate, endDate) => {
@@ -1670,6 +1674,99 @@
 
     applyCleanRoomEquipmentRows(template, targetDateStr);
   };
+  const applyCleanRoomAdvisorDefaults = () => {
+    const advisorNameInput = getCleanRoomInput('input[name="advisorName"]');
+    const advisorMobileInput = getCleanRoomInput('input[name="advisorMobileNo"]');
+    const advisorSkeyInput = getCleanRoomInput('input[name="advisorSkey"]');
+
+    if (advisorNameInput && !normalizeText(advisorNameInput.value || '') && CLEAN_ROOM_DEFAULT_ADVISOR_NAME) {
+      setNativeFieldValue(advisorNameInput, CLEAN_ROOM_DEFAULT_ADVISOR_NAME);
+    }
+    if (advisorMobileInput && !normalizeText(advisorMobileInput.value || '') && CLEAN_ROOM_DEFAULT_ADVISOR_MOBILE) {
+      setNativeFieldValue(advisorMobileInput, CLEAN_ROOM_DEFAULT_ADVISOR_MOBILE);
+    }
+    if (advisorSkeyInput && !normalizeText(advisorSkeyInput.value || '') && CLEAN_ROOM_DEFAULT_ADVISOR_SKEY) {
+      setNativeFieldValue(advisorSkeyInput, CLEAN_ROOM_DEFAULT_ADVISOR_SKEY);
+    }
+  };
+  const fetchCleanRoomAdvisorAccountDirect = async () => {
+    const jq = window.jQuery || window.$;
+    const requesterUserSkey = getCleanRoomInputValue('input[name="userSkey"]');
+    if (!jq?.ajax || !requesterUserSkey || !CLEAN_ROOM_DEFAULT_ACCOUNT_CODE) return null;
+
+    try {
+      const response = await jq.ajax({
+        url: '/account/hm/pop/accountSelect/list/json',
+        type: 'post',
+        dataType: 'json',
+        data: {
+          managerName: CLEAN_ROOM_DEFAULT_ADVISOR_NAME,
+          userSkey: requesterUserSkey,
+          searchApply: 'Y',
+          admissionChk: '',
+          acctNo: CLEAN_ROOM_DEFAULT_ACCOUNT_CODE
+        }
+      });
+
+      const rows = Array.isArray(response?.rows)
+        ? response.rows
+        : Array.isArray(response?.data?.rows)
+          ? response.data.rows
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response)
+              ? response
+              : [];
+
+      if (!rows.length) return null;
+
+      const normalizedCode = normalizeText(CLEAN_ROOM_DEFAULT_ACCOUNT_CODE);
+      const normalizedName = normalizeText(CLEAN_ROOM_DEFAULT_ADVISOR_NAME);
+
+      return (
+        rows.find(
+          (row) =>
+            normalizeText(row?.acctNo || '') === normalizedCode &&
+            normalizeText(row?.userMstrVO?.name || row?.name || '') === normalizedName
+        ) ||
+        rows.find((row) => normalizeText(row?.acctNo || '') === normalizedCode) ||
+        rows.find((row) => normalizeText(row?.userMstrVO?.name || row?.name || '') === normalizedName) ||
+        rows[0]
+      );
+    } catch (error) {
+      console.warn('[GEXT] clean room advisor direct lookup failed:', error);
+      return null;
+    }
+  };
+  const applyCleanRoomAdvisorAccount = (account) => {
+    if (!account) return false;
+
+    const advisorName = account?.userMstrVO?.name || CLEAN_ROOM_DEFAULT_ADVISOR_NAME;
+    const advisorMobile =
+      account?.userMstrVO?.phoneNo ||
+      account?.userMstrVO?.mobileNo ||
+      CLEAN_ROOM_DEFAULT_ADVISOR_MOBILE;
+    const advisorEmail = account?.userMstrVO?.email || CLEAN_ROOM_DEFAULT_ADVISOR_EMAIL;
+    const advisorSkey = account?.manager || account?.advisorSkey || CLEAN_ROOM_DEFAULT_ADVISOR_SKEY;
+
+    let applied = false;
+    [
+      ['input[name="acctSkey"]', account?.acctSkey],
+      ['input[name="advisorSkey"]', advisorSkey],
+      ['input[name="advisorName"]', advisorName],
+      ['input[name="advisorMobileNo"]', advisorMobile],
+      ['input[name="advisorEmailDefault"]', advisorEmail],
+      ['input[name="advisorEmail"]', advisorEmail]
+    ].forEach(([selector, value]) => {
+      if (!value) return;
+      const input = getCleanRoomInput(selector);
+      if (!input) return;
+      setNativeFieldValue(input, value);
+      applied = true;
+    });
+
+    return applied;
+  };
   const ensureCleanRoomAdvisorEmail = () => {
     const advisorEmailInput = getCleanRoomInput('input[name="advisorEmail"]');
     if (!advisorEmailInput) return;
@@ -1831,9 +1928,29 @@
     return true;
   };
   const ensureCleanRoomAdvisorAccount = async () => {
+    applyCleanRoomAdvisorDefaults();
+
     const acctSkey = getCleanRoomInputValue('input[name="acctSkey"]');
     const advisorSkey = getCleanRoomInputValue('input[name="advisorSkey"]');
     if (acctSkey && advisorSkey) return true;
+
+    const directAccount = await fetchCleanRoomAdvisorAccountDirect();
+    if (directAccount) {
+      applyCleanRoomAdvisorAccount(directAccount);
+
+      const directlyResolved = await waitFor(
+        () => {
+          const nextAcctSkey = getCleanRoomInputValue('input[name="acctSkey"]');
+          const nextAdvisorSkey = getCleanRoomInputValue('input[name="advisorSkey"]');
+          return nextAcctSkey && nextAdvisorSkey ? { acctSkey: nextAcctSkey, advisorSkey: nextAdvisorSkey } : null;
+        },
+        { timeoutMs: 2000, intervalMs: 100 }
+      );
+
+      if (directlyResolved) {
+        return true;
+      }
+    }
 
     const accountSearchButton = getCleanRoomInput('#accountSearch');
     if (!accountSearchButton) {
