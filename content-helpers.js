@@ -83,6 +83,17 @@
     return '';
   };
   const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const escapeHtml = (value) =>
+    String(value ?? '').replace(/[&<>"']/g, (char) => {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      };
+      return map[char] || char;
+    });
   const normalizeCalendarEntry = (entry = {}) => {
     const startValue = getFirstValue(
       entry.start,
