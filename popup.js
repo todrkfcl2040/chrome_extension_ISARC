@@ -118,8 +118,24 @@ const escapeHtml = (value) =>
     return map[char] || char;
   });
 
+const getEducationEquipmentName = (education = {}) =>
+  education.NAME ||
+  education.EQUIP_NAME_ENG ||
+  education.EQUIP_ENG_NAME ||
+  education.ENG_EQUIP_NAME ||
+  education.EQUIP_NAME_EN ||
+  education.EQUIP_EN_NAME ||
+  education.ENG_NAME ||
+  education.ENG_NM ||
+  education.NAME_ENG ||
+  education.NAME_EN ||
+  education.EN_NAME ||
+  education.EN_NM ||
+  education.EQUIP_NAME ||
+  '장비교육';
+
 const buildEducationOptionLabel = (education) => {
-  const equipmentName = education.EQUIP_NAME || education.NAME || '장비교육';
+  const equipmentName = getEducationEquipmentName(education);
   return `${education.RECEIVE_START_DT_STR} 오픈 · ${equipmentName}`;
 };
 
@@ -151,7 +167,7 @@ const renderUpcomingEducationDetails = () => {
   }
 
   const firstEducation = checkedEducations[0];
-  const equipmentName = firstEducation.EQUIP_NAME || firstEducation.NAME || '장비교육';
+  const equipmentName = getEducationEquipmentName(firstEducation);
 
   if (checkedEducations.length === 1) {
     setText(

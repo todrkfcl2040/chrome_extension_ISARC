@@ -1035,8 +1035,24 @@
     reservationUrl.searchParams.set('STATUS', 'RE');
     return reservationUrl.toString();
   };
+  const getEducationEquipmentName = (education = {}) =>
+    education.NAME ||
+    education.EQUIP_NAME_ENG ||
+    education.EQUIP_ENG_NAME ||
+    education.ENG_EQUIP_NAME ||
+    education.EQUIP_NAME_EN ||
+    education.EQUIP_EN_NAME ||
+    education.ENG_NAME ||
+    education.ENG_NM ||
+    education.NAME_ENG ||
+    education.NAME_EN ||
+    education.EN_NAME ||
+    education.EN_NM ||
+    education.EQUIP_NAME ||
+    '';
   const resolveEducationContext = (education = {}) => {
     const url = new URL(window.location.href);
+    const equipmentName = getEducationEquipmentName(education);
     return {
       EVENT_SKEY:
         education.EVENT_SKEY || getDocValue(document, 'EVENT_SKEY') || url.searchParams.get('EVENT_SKEY') || '',
@@ -1055,8 +1071,8 @@
         getDocValue(document, 'AMOUNT_OUT') ||
         url.searchParams.get('PLAN_AMOUNT') ||
         0,
-      EQUIP_NAME: education.EQUIP_NAME || education.NAME || '',
-      NAME: education.NAME || education.EQUIP_NAME || ''
+      EQUIP_NAME: equipmentName,
+      NAME: equipmentName || education.NAME || education.EQUIP_NAME || ''
     };
   };
   const loadEducationReservationDocument = async (educationContext) => {
@@ -1370,7 +1386,7 @@
 
       if (emailConfig?.userEmail) {
         G.sendEmail(emailConfig, {
-          start: educationContext.EQUIP_NAME || educationContext.NAME || '장비교육 신청 완료',
+          start: getEducationEquipmentName(educationContext) || '장비교육 신청 완료',
           end: successMessage
         });
       }

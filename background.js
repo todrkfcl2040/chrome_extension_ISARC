@@ -115,6 +115,22 @@ const parseDateTime = (value) => {
   return new Date(year, month - 1, day, hour, minute, second, 0);
 };
 
+const getEducationEquipmentName = (education = {}) =>
+  education.NAME ||
+  education.EQUIP_NAME_ENG ||
+  education.EQUIP_ENG_NAME ||
+  education.ENG_EQUIP_NAME ||
+  education.EQUIP_NAME_EN ||
+  education.EQUIP_EN_NAME ||
+  education.ENG_NAME ||
+  education.ENG_NM ||
+  education.NAME_ENG ||
+  education.NAME_EN ||
+  education.EN_NAME ||
+  education.EN_NM ||
+  education.EQUIP_NAME ||
+  '';
+
 const parseVersionParts = (value) =>
   String(value || '')
     .split('.')
@@ -555,7 +571,7 @@ const buildQueuedEducationOpenState = (clock, educations) => {
     targetOpenMs: nextTarget.plan.targetOpenMs,
     targetOpenText: nextTarget.plan.targetOpenText,
     localAlarmAtMs: nextTarget.plan.localAlarmAtMs,
-    equipmentName: nextTarget.education.EQUIP_NAME || nextTarget.education.NAME || ''
+    equipmentName: getEducationEquipmentName(nextTarget.education)
   };
 };
 
@@ -960,7 +976,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
           hasSchedule: true,
           targetOpenText: data.targetOpenText,
           targetOpenMs: data.targetOpenMs,
-          equipmentName: nextEducation?.EQUIP_NAME || nextEducation?.NAME || '',
+          equipmentName: getEducationEquipmentName(nextEducation),
           education: nextEducation,
           count: data.educations.length
         });
